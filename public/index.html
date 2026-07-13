@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+<title>Lowest Sum &mdash; a card game with friends</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500&family=Inter:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<div id="toast" class="toast hidden"></div>
+
+<!-- ================= LANDING: create or join a room ================= -->
+<section id="screen-landing" class="screen">
+  <div class="landing-card">
+    <p class="eyebrow">A game of hidden cards &amp; bad math</p>
+    <h1>Lowest Sum</h1>
+    <p class="tagline">Four cards. Two you've seen. Add wrong, and it costs you.</p>
+
+    <div class="landing-tabs">
+      <button class="tab-btn active" data-tab="create">New table</button>
+      <button class="tab-btn" data-tab="join">Join a table</button>
+    </div>
+
+    <div class="tab-panel" id="panel-create">
+      <label class="field">
+        <span>Your name</span>
+        <input type="text" id="create-name" maxlength="20" placeholder="e.g. Daksh" />
+      </label>
+      <button class="btn btn-primary" id="btn-create-room">Deal me in</button>
+    </div>
+
+    <div class="tab-panel hidden" id="panel-join">
+      <label class="field">
+        <span>Your name</span>
+        <input type="text" id="join-name" maxlength="20" placeholder="e.g. Daksh" />
+      </label>
+      <label class="field">
+        <span>Table code</span>
+        <input type="text" id="join-code" maxlength="4" placeholder="e.g. K7Q2" style="text-transform:uppercase" />
+      </label>
+      <button class="btn btn-primary" id="btn-join-room">Sit down</button>
+    </div>
+  </div>
+</section>
+
+<!-- ================= LOBBY: waiting room ================= -->
+<section id="screen-lobby" class="screen hidden">
+  <div class="lobby-card">
+    <p class="eyebrow">Table code &mdash; share this with friends</p>
+    <div class="room-code" id="lobby-room-code">----</div>
+
+    <h2>Who's at the table</h2>
+    <ul class="player-list" id="lobby-player-list"></ul>
+
+    <p class="hint" id="lobby-hint">Waiting for the host to start&hellip;</p>
+    <button class="btn btn-primary hidden" id="btn-start-game">Start the game</button>
+  </div>
+</section>
+
+<!-- ================= GAME TABLE ================= -->
+<section id="screen-game" class="screen hidden">
+  <header class="table-header">
+    <div class="table-header-left">
+      <span class="room-chip" id="game-room-code">----</span>
+      <span class="round-chip" id="game-round">Round 1</span>
+    </div>
+    <div class="table-header-right">
+      <button class="btn btn-ghost btn-small hidden" id="btn-challenge">Call challenge</button>
+    </div>
+  </header>
+
+  <div class="table-felt">
+    <div class="opponents-ring" id="opponents-ring"></div>
+
+    <div class="table-center">
+      <div class="pile-group">
+        <div class="pile draw-pile" id="draw-pile" title="Draw pile">
+          <div class="card card-back"></div>
+          <span class="pile-count" id="deck-count">52</span>
+        </div>
+        <div class="pile discard-pile" id="discard-pile" title="Discard pile"></div>
+      </div>
+      <p class="turn-banner" id="turn-banner">Waiting&hellip;</p>
+    </div>
+  </div>
+
+  <div class="pending-panel hidden" id="pending-panel">
+    <p class="pending-title" id="pending-title">You drew a card</p>
+    <div class="pending-card-slot" id="pending-card-slot"></div>
+    <div class="pending-actions" id="pending-actions"></div>
+  </div>
+
+  <div class="my-hand-area">
+    <p class="my-hand-label">Your hand <span id="my-foul-count"></span></p>
+    <div class="my-hand" id="my-hand"></div>
+  </div>
+
+  <div class="log-drawer">
+    <button class="log-toggle" id="log-toggle">Table talk &#9650;</button>
+    <ul class="log-list hidden" id="log-list"></ul>
+  </div>
+</section>
+
+<!-- ================= GAME OVER ================= -->
+<section id="screen-gameover" class="screen hidden">
+  <div class="lobby-card">
+    <p class="eyebrow">Hands revealed</p>
+    <h2 id="gameover-winner">&mdash;</h2>
+    <ul class="results-list" id="gameover-results"></ul>
+    <button class="btn btn-primary" id="btn-back-to-landing">Back to start</button>
+  </div>
+</section>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="client.js"></script>
+</body>
+</html>
