@@ -1,0 +1,415 @@
+/* =============================================================
+   DESIGN TOKENS
+   A late-night card room: ink and bottle-green, lit by one brass
+   lamp. Crimson marks the danger spots (fouls, hearts/diamonds).
+   ============================================================= */
+:root {
+  --ink: #12161c;
+  --felt: #1c2b27;
+  --felt-dark: #131f1c;
+  --parchment: #f4ecdb;
+  --parchment-dim: #e4d9c2;
+  --brass: #cda558;
+  --brass-bright: #e6c47c;
+  --crimson: #b1484b;
+  --mist: #93a29c;
+  --mist-dim: #5d6864;
+  --ok-green: #6f9b74;
+
+  --font-display: 'Fraunces', serif;
+  --font-body: 'Inter', system-ui, sans-serif;
+  --font-mono: 'Space Mono', monospace;
+
+  --radius-card: 10px;
+  --radius-panel: 16px;
+  --shadow-deep: 0 12px 32px rgba(0,0,0,0.45);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  background: var(--ink);
+  color: var(--parchment);
+  font-family: var(--font-body);
+}
+
+h1, h2, h3 { font-family: var(--font-display); margin: 0; font-weight: 600; }
+
+.hidden { display: none !important; }
+
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--brass);
+  margin: 0 0 6px;
+}
+
+/* ---------------- shared screen scaffolding ---------------- */
+.screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.landing-card, .lobby-card {
+  width: 100%;
+  max-width: 420px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0));
+  border: 1px solid rgba(205,165,88,0.25);
+  border-radius: var(--radius-panel);
+  padding: 32px 28px;
+  box-shadow: var(--shadow-deep);
+  text-align: center;
+}
+
+.landing-card h1 {
+  font-size: 40px;
+  margin-bottom: 10px;
+}
+
+.tagline {
+  color: var(--mist);
+  font-size: 14.5px;
+  margin: 0 0 26px;
+  line-height: 1.5;
+}
+
+.landing-tabs {
+  display: flex;
+  gap: 6px;
+  background: rgba(0,0,0,0.25);
+  padding: 4px;
+  border-radius: 999px;
+  margin-bottom: 22px;
+}
+.tab-btn {
+  flex: 1;
+  padding: 9px 0;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--mist);
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+.tab-btn.active { background: var(--brass); color: var(--ink); }
+
+.field {
+  display: block;
+  text-align: left;
+  margin-bottom: 14px;
+}
+.field span {
+  display: block;
+  font-size: 12px;
+  color: var(--mist);
+  margin-bottom: 5px;
+  letter-spacing: 0.02em;
+}
+.field input {
+  width: 100%;
+  padding: 11px 13px;
+  border-radius: 9px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(0,0,0,0.3);
+  color: var(--parchment);
+  font-family: var(--font-mono);
+  font-size: 15px;
+}
+.field input:focus { outline: 2px solid var(--brass); outline-offset: 1px; }
+
+.btn {
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 14.5px;
+  padding: 12px 20px;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.08s ease, filter 0.15s ease;
+}
+.btn:hover { filter: brightness(1.08); }
+.btn:active { transform: scale(0.97); }
+.btn-primary {
+  width: 100%;
+  background: var(--brass);
+  color: var(--ink);
+}
+.btn-ghost {
+  background: transparent;
+  border: 1px solid rgba(205,165,88,0.5);
+  color: var(--brass-bright);
+}
+.btn-small { font-size: 12.5px; padding: 8px 14px; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn:focus-visible { outline: 2px solid var(--brass-bright); outline-offset: 2px; }
+
+/* ---------------- lobby ---------------- */
+.room-code {
+  font-family: var(--font-mono);
+  font-size: 40px;
+  letter-spacing: 0.18em;
+  color: var(--brass-bright);
+  margin: 6px 0 24px;
+}
+.lobby-card h2 { font-size: 16px; margin-bottom: 10px; color: var(--mist); font-family: var(--font-body); font-weight: 700; }
+.player-list, .results-list { list-style: none; margin: 0 0 20px; padding: 0; text-align: left; }
+.player-list li, .results-list li {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.03);
+  margin-bottom: 6px;
+  font-size: 14.5px;
+}
+.player-list li .host-tag { color: var(--brass); font-size: 11px; font-family: var(--font-mono); }
+.hint { color: var(--mist); font-size: 13.5px; }
+
+/* ---------------- game table ---------------- */
+#screen-game { align-items: stretch; padding: 0; flex-direction: column; }
+
+.table-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 20px;
+  background: var(--felt-dark);
+  border-bottom: 1px solid rgba(205,165,88,0.2);
+}
+.table-header-left { display: flex; gap: 10px; align-items: center; }
+.room-chip, .round-chip {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--mist);
+  background: rgba(0,0,0,0.25);
+  padding: 5px 10px;
+  border-radius: 999px;
+}
+.round-chip { color: var(--brass-bright); }
+
+.table-felt {
+  flex: 1;
+  background:
+    radial-gradient(ellipse at 50% 30%, rgba(255,255,255,0.05), transparent 60%),
+    var(--felt);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  gap: 18px;
+  position: relative;
+  min-height: 320px;
+}
+
+.opponents-ring {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 18px;
+  max-width: 900px;
+}
+.opponent {
+  background: rgba(0,0,0,0.22);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  padding: 10px 12px;
+  min-width: 128px;
+  text-align: center;
+}
+.opponent.is-turn { border-color: var(--brass); box-shadow: 0 0 0 1px var(--brass); }
+.opponent.disconnected { opacity: 0.4; }
+.opponent-name {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+.opponent-name .turn-dot {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--brass-bright);
+}
+.opponent-cards { display: flex; justify-content: center; gap: 4px; flex-wrap: wrap; }
+.opponent-cards .card { width: 30px; height: 42px; font-size: 0; cursor: default; }
+.opponent-foul { font-size: 10.5px; color: var(--crimson); margin-top: 4px; font-family: var(--font-mono); }
+
+.table-center { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.pile-group { display: flex; gap: 22px; align-items: flex-end; }
+.pile { position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; cursor: pointer; }
+.pile-count { font-family: var(--font-mono); font-size: 11.5px; color: var(--mist); }
+.draw-pile:hover .card-back { filter: brightness(1.15); }
+
+.turn-banner {
+  font-family: var(--font-display);
+  font-size: 17px;
+  color: var(--parchment);
+  background: rgba(0,0,0,0.25);
+  padding: 8px 18px;
+  border-radius: 999px;
+  margin: 0;
+}
+
+/* ---------------- card ---------------- */
+.card {
+  width: 58px;
+  height: 82px;
+  border-radius: var(--radius-card);
+  background: var(--parchment);
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  font-family: var(--font-display);
+  font-weight: 600;
+  box-shadow: 0 3px 8px rgba(0,0,0,0.35);
+  border: 1px solid rgba(0,0,0,0.08);
+  position: relative;
+  user-select: none;
+}
+.card .rank { font-size: 20px; line-height: 1; }
+.card .suit { font-size: 14px; margin-top: 2px; }
+.card.suit-red .rank, .card.suit-red .suit { color: var(--crimson); }
+.card.suit-black .rank, .card.suit-black .suit { color: var(--ink); }
+
+.card-back {
+  background:
+    repeating-linear-gradient(45deg, var(--felt-dark) 0 6px, var(--felt) 6px 12px);
+  border: 1px solid rgba(205,165,88,0.4);
+  position: relative;
+}
+.card-back::after {
+  content: "LS";
+  font-family: var(--font-display);
+  font-size: 15px;
+  color: var(--brass-bright);
+  letter-spacing: 0.04em;
+}
+
+.card-face-down {
+  background: var(--felt-dark);
+  border: 1px solid rgba(205,165,88,0.35);
+}
+.card-face-down::after {
+  content: "?";
+  color: var(--mist-dim);
+  font-family: var(--font-display);
+  font-size: 20px;
+}
+
+.card.empty-slot {
+  background: transparent;
+  border: 1px dashed rgba(255,255,255,0.15);
+  box-shadow: none;
+}
+
+.card.selectable { cursor: pointer; transition: transform 0.12s ease; }
+.card.selectable:hover { transform: translateY(-6px); }
+.card.selected { outline: 3px solid var(--brass-bright); outline-offset: 2px; }
+
+/* card flip, used when a peek/reveal happens */
+.card.flip { animation: flip 0.4s ease; }
+@keyframes flip {
+  0% { transform: rotateY(0deg); }
+  50% { transform: rotateY(90deg); }
+  100% { transform: rotateY(0deg); }
+}
+
+/* ---------------- pending draw panel ---------------- */
+.pending-panel {
+  background: var(--felt-dark);
+  border-top: 1px solid rgba(205,165,88,0.25);
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.pending-title { margin: 0; font-family: var(--font-display); font-size: 15px; color: var(--brass-bright); }
+.pending-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+
+/* ---------------- my hand ---------------- */
+.my-hand-area {
+  background: var(--felt-dark);
+  border-top: 1px solid rgba(205,165,88,0.2);
+  padding: 16px 20px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.my-hand-label {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mist);
+  margin: 0;
+}
+#my-foul-count { color: var(--crimson); }
+.my-hand { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+
+/* ---------------- log drawer ---------------- */
+.log-drawer { border-top: 1px solid rgba(255,255,255,0.06); }
+.log-toggle {
+  width: 100%;
+  background: var(--ink);
+  color: var(--mist);
+  border: none;
+  padding: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  cursor: pointer;
+}
+.log-list {
+  list-style: none;
+  margin: 0;
+  padding: 10px 20px;
+  max-height: 160px;
+  overflow-y: auto;
+  background: var(--ink);
+  font-size: 12.5px;
+  color: var(--mist);
+}
+.log-list li { padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+
+/* ---------------- toast ---------------- */
+.toast {
+  position: fixed;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--crimson);
+  color: var(--parchment);
+  padding: 10px 18px;
+  border-radius: 999px;
+  font-size: 13.5px;
+  font-weight: 600;
+  z-index: 100;
+  box-shadow: var(--shadow-deep);
+}
+
+/* ---------------- game over ---------------- */
+.results-list li.winner { border: 1px solid var(--brass); background: rgba(205,165,88,0.1); }
+.results-list .result-name { font-weight: 700; }
+.results-list .result-sum { font-family: var(--font-mono); color: var(--brass-bright); }
+
+/* ---------------- responsive ---------------- */
+@media (max-width: 480px) {
+  .card { width: 48px; height: 68px; }
+  .card .rank { font-size: 16px; }
+  .landing-card, .lobby-card { padding: 26px 20px; }
+  .landing-card h1 { font-size: 32px; }
+}
