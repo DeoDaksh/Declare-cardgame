@@ -1,0 +1,13 @@
+{
+  "name": "lowest-sum-card-game",
+  "version": "1.0.0",
+  "description": "A real-time multiplayer card game - draw, swap, match, and bluff your way to the lowest hand.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5"
+  }
+}
