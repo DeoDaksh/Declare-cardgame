@@ -40,6 +40,15 @@ h1, h2, h3 { font-family: var(--font-display); margin: 0; font-weight: 600; }
 
 .hidden { display: none !important; }
 
+.secret{
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  color: black;
+  font-size: 2px;
+  z-index: 1000;
+}
+
 .eyebrow {
   font-family: var(--font-mono);
   font-size: 11px;
