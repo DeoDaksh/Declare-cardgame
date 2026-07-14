@@ -21,9 +21,43 @@ let ui = {
   mode: null,           // null | 'awaiting-swap-slot' | 'awaiting-peek-own' | 'awaiting-peek-opponent' | 'awaiting-swap-own' | 'awaiting-swap-opponent'
   swapOwnSlotIndex: null,
   peekChoices: [],      // used only during the initial "pick 2 cards" phase
+  matchSlotIndex: null, // card selected for a match attempt, awaiting confirm/cancel
 };
 
 socket.on('connect', () => { myId = socket.id; });
+
+// -------------------------------------------------------------
+// Turn-change beep (Web Audio oscillator - no asset file needed)
+// -------------------------------------------------------------
+let audioCtx = null;
+function ensureAudioUnlocked() {
+  if (!audioCtx) {
+    try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+    catch (e) { audioCtx = null; }
+  } else if (audioCtx.state === 'suspended') {
+    audioCtx.resume().catch(() => {});
+  }
+}
+// Browsers refuse to play audio before a user gesture - unlock on the
+// first click anywhere on the page (landing screen buttons count).
+document.addEventListener('click', ensureAudioUnlocked, { once: true });
+
+function playBeep() {
+  ensureAudioUnlocked();
+  if (!audioCtx) return;
+  try {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = 880;
+    gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.25, audioCtx.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.35);
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.36);
+  } catch (e) { /* audio unavailable - not worth surfacing to the user */ }
+}
 
 // -------------------------------------------------------------
 // Small helpers
@@ -73,6 +107,7 @@ function cardFaceDownEl(extraClass) {
 function resetUiMode() {
   ui.mode = null;
   ui.swapOwnSlotIndex = null;
+  ui.matchSlotIndex = null;
 }
 
 // =============================================================
@@ -118,8 +153,21 @@ document.getElementById('log-toggle').addEventListener('click', () => {
   list.classList.toggle('hidden');
 });
 
+document.getElementById('btn-confirm-match').addEventListener('click', () => {
+  if (ui.matchSlotIndex === null) return;
+  socket.emit('attempt-match', { slotIndex: ui.matchSlotIndex });
+  ui.matchSlotIndex = null;
+  render(latestState);
+});
+
+document.getElementById('btn-cancel-match').addEventListener('click', () => {
+  ui.matchSlotIndex = null;
+  render(latestState);
+});
+
 document.getElementById('draw-pile').addEventListener('click', () => {
   if (!latestState) return;
+  if (latestState.turnCooldownUntil) return;
   const iAmTurn = latestState.turnPlayerId === myId;
   const busy = latestState.pendingDraw || latestState.pendingPowerIsMine;
   if (!iAmTurn || busy) return;
@@ -149,6 +197,33 @@ socket.on('power-result', (result) => {
 socket.on('match-result', (result) => {
   toast(result.correct ? 'Nice - matched! Card gone.' : 'Wrong match - foul! Picked up a penalty card.');
 });
+
+socket.on('play-beep', playBeep);
+
+// Countdowns (turn cooldown, peek reveal) tick down between the server
+// pushes that bookend them, so we refresh their on-screen text locally.
+setInterval(() => {
+  if (!latestState) return;
+  tickTurnCooldown(latestState);
+  tickPeekCountdown(latestState);
+}, 250);
+
+function tickTurnCooldown(state) {
+  if (!state.turnCooldownUntil || state.phase === 'lobby' || state.phase === 'ended') return;
+  const banner = document.getElementById('turn-banner');
+  if (!banner) return;
+  const remaining = Math.max(0, Math.ceil((state.turnCooldownUntil - Date.now()) / 1000));
+  banner.textContent = `Next turn starts in ${remaining}s...`;
+}
+
+function tickPeekCountdown(state) {
+  const el = document.getElementById('peek-reveal-countdown');
+  if (!el) return;
+  const me = state.players && state.players.find(p => p.isMe);
+  if (!me || !me.peekRevealUntil) { el.textContent = ''; return; }
+  const remaining = Math.max(0, Math.ceil((me.peekRevealUntil - Date.now()) / 1000));
+  el.textContent = remaining > 0 ? `(hiding in ${remaining}s)` : '';
+}
 
 // =============================================================
 // MAIN RENDER
@@ -295,6 +370,11 @@ function renderPiles(state) {
 
 function renderTurnBanner(state, me) {
   const banner = document.getElementById('turn-banner');
+  if (state.turnCooldownUntil) {
+    const remaining = Math.max(0, Math.ceil((state.turnCooldownUntil - Date.now()) / 1000));
+    banner.textContent = `Next turn starts in ${remaining}s...`;
+    return;
+  }
   if (state.pendingPowerIsMine) {
     const label = { 'peek-own': 'Pick one of your own cards to peek at.',
                     'peek-opponent': "Pick one of an opponent's cards to peek at.",
@@ -367,9 +447,14 @@ function renderMyHand(state, me) {
   document.getElementById('my-foul-count').textContent = me.foulCount ? `- ${me.foulCount} foul${me.foulCount > 1 ? 's' : ''}` : '';
 
   if (state.phase === 'peeking' && !hasPeeked(me)) {
+    ui.matchSlotIndex = null;
+    renderMatchActions();
     renderPeekSelection(handEl, me);
     return;
   }
+
+  const canAttemptMatchNow = ui.mode === null && (state.phase === 'playing' || state.phase === 'final') && !state.pendingDraw && !state.pendingPowerIsMine;
+  if (!canAttemptMatchNow) ui.matchSlotIndex = null;
 
   me.hand.forEach((slot, idx) => {
     let el;
@@ -382,7 +467,9 @@ function renderMyHand(state, me) {
     const clickableForSwap = ui.mode === 'awaiting-swap-slot';
     const clickableForPeekOwn = ui.mode === 'awaiting-peek-own';
     const clickableForSwapOwn = ui.mode === 'awaiting-swap-own';
-    const clickableForMatch = ui.mode === null && (state.phase === 'playing' || state.phase === 'final') && !state.pendingDraw && !state.pendingPowerIsMine;
+    const clickableForMatch = canAttemptMatchNow;
+
+    if (clickableForMatch && ui.matchSlotIndex === idx) el.classList.add('selected');
 
     if (clickableForSwap || clickableForPeekOwn || clickableForSwapOwn || clickableForMatch) {
       el.classList.add('selectable');
@@ -397,13 +484,18 @@ function renderMyHand(state, me) {
           ui.mode = 'awaiting-swap-opponent';
           render(latestState);
         } else if (clickableForMatch) {
-          socket.emit('attempt-match', { slotIndex: idx });
+          // Select or deselect - the actual attempt is sent from the
+          // confirm button in the action bar, not on click here.
+          ui.matchSlotIndex = ui.matchSlotIndex === idx ? null : idx;
+          render(latestState);
         }
       });
     }
 
     handEl.appendChild(el);
   });
+
+  renderMatchActions();
 
   // If a swap-blind power is active and we're waiting for the own-card pick,
   // set the mode automatically the first time we see it.
@@ -421,8 +513,13 @@ function renderMyHand(state, me) {
   }
 }
 
+function renderMatchActions() {
+  const bar = document.getElementById('match-actions');
+  bar.classList.toggle('hidden', ui.matchSlotIndex === null);
+}
+
 function hasPeeked(me) {
-  return me.hand.some(s => s.known);
+  return !!me.peeked;
 }
 
 function renderPeekSelection(handEl, me) {
@@ -450,6 +547,7 @@ function renderPeekSelection(handEl, me) {
 function renderChallengeButton(state) {
   const btn = document.getElementById('btn-challenge');
   const eligible = state.phase === 'playing' &&
+    !state.turnCooldownUntil &&
     state.turnPlayerId === myId &&
     !state.pendingDraw &&
     !state.pendingPowerIsMine &&
