@@ -40,6 +40,16 @@ function broadcastRoom(room) {
   }
 }
 
+// Room fires these on its own (from setTimeout callbacks - the turn
+// cooldown and the peek-reveal window), independent of any socket
+// handler, so they need their own listeners rather than piggybacking
+// on a request/response flow. Call this once, right when a room is
+// created (not on join - the room already has its listeners by then).
+function attachRoomEvents(room) {
+  room.on('beep', () => io.to(room.code).emit('play-beep'));
+  room.on('update', () => broadcastRoom(room));
+}
+
 function safeHandler(socket, fn) {
   try {
     fn();
@@ -54,6 +64,7 @@ io.on('connection', (socket) => {
     const room = new Room(code);
     room.addPlayer(socket.id, (name || 'Player').trim().slice(0, 20));
     rooms.set(code, room);
+    attachRoomEvents(room);
     socketInfo.set(socket.id, { roomCode: code, playerId: socket.id });
     socket.join(code);
     broadcastRoom(room);
