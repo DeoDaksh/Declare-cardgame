@@ -34,6 +34,15 @@ const POWERS = {
 // finished - i.e. round 3 onward, per the house rules given.
 const MIN_ROUND_TO_CHALLENGE = 3;
 
+// After any action that ends a turn (swap, discard, or power resolved),
+// the room waits this long before the next player's turn actually
+// starts. Gives everyone a beat to see what happened and hear the beep.
+const TURN_COOLDOWN_MS = 10000;
+
+// How long a player's two initially-peeked cards stay face-up for them
+// after they pick them, before flipping back face-down (memory game).
+const PEEK_REVEAL_MS = 10000;
+
 function freshDeck() {
   const deck = [];
   for (const suit of SUITS) {
@@ -52,13 +61,22 @@ function shuffle(arr) {
   return arr;
 }
 
+const EventEmitter = require('events');
+
 let uidCounter = 1;
 function nextUid() {
   return `c${uidCounter++}`;
 }
 
-class Room {
+// Room emits two events the socket layer should listen for per-room:
+//   'update' - state changed asynchronously (a timer fired) and clients
+//              need a fresh room-update push (call room.viewFor(socketId)
+//              per connected socket, same as after any normal action).
+//   'beep'   - a turn just transitioned to the next player; play the
+//              turn-change sound for everyone at the table.
+class Room extends EventEmitter {
   constructor(code) {
+    super();
     this.code = code;
     this.players = [];       // { id, name, connected, hand: [slot], foulCount }
     this.phase = 'lobby';    // lobby -> peeking -> playing -> final -> ended
@@ -71,6 +89,8 @@ class Room {
     this.challenge = null;     // { challengerId, remainingTurns }
     this.log = [];             // human readable event feed for the UI
     this.hostId = null;
+    this.cooldownUntil = null; // epoch ms while waiting between turns, else null
+    this.cooldownTimer = null; // Node timer handle for the above
   }
 
   // ---- helpers -----------------------------------------------------
@@ -135,6 +155,9 @@ class Room {
     this.challenge = null;
     this.pendingDraw = null;
     this.pendingPower = null;
+    if (this.cooldownTimer) clearTimeout(this.cooldownTimer);
+    this.cooldownTimer = null;
+    this.cooldownUntil = null;
 
     for (const player of this.players) {
       player.foulCount = 0;
@@ -143,6 +166,7 @@ class Room {
         player.hand.push({ uid: nextUid(), card: this.deck.pop(), knownBy: [] });
       }
       player.peeked = false;
+      player.peekReveal = null; // { slotIndices, until } - set while the initial 2 peeked cards are still shown face-up
     }
 
     // Flip one card to start the discard pile.
@@ -166,16 +190,27 @@ class Room {
     if (unique.size !== 2 || [...unique].some(i => i < 0 || i > 3)) {
       throw new Error('Invalid card selection');
     }
-    for (const i of slotIndices) {
-      player.hand[i].knownBy.push(playerId);
-    }
+
+    // Note: we deliberately do NOT add these to knownBy permanently - this
+    // is a memory game, so the reveal is temporary (see PEEK_REVEAL_MS).
     player.peeked = true;
+    player.peekReveal = { slotIndices: [...slotIndices], until: Date.now() + PEEK_REVEAL_MS };
     this.addLog(`${player.name} peeked at their cards.`);
 
     if (this.players.every(p => p.peeked)) {
       this.phase = 'playing';
       this.addLog(`All set. ${this.currentPlayer().name} goes first.`);
     }
+
+    // Auto-hide once the reveal window elapses. Only this player's own
+    // view is affected, but everyone gets a fresh push so the flip-down
+    // animation shows up for them right on time.
+    setTimeout(() => {
+      if (player.peekReveal && player.peekReveal.until <= Date.now()) {
+        player.peekReveal = null;
+        this.emit('update');
+      }
+    }, PEEK_REVEAL_MS + 50);
   }
 
   // ---- turn actions ----------------------------------------------------
@@ -184,6 +219,7 @@ class Room {
     if (this.phase !== 'playing' && this.phase !== 'final') {
       throw new Error('Not currently playing');
     }
+    if (this.cooldownUntil) throw new Error('Waiting for the next turn to begin');
     if (this.currentPlayer().id !== playerId) throw new Error('Not your turn');
     if (this.pendingDraw) throw new Error('You already drew a card this turn');
 
@@ -358,7 +394,22 @@ class Room {
       }
     }
 
-    this.advanceToNextConnectedPlayer();
+    this.beginTurnCooldown();
+  }
+
+  // Holds the table for TURN_COOLDOWN_MS before actually advancing
+  // turnIndex. During this window nobody's turn is "live" - drawCard()
+  // and callChallenge() both refuse to act while cooldownUntil is set.
+  beginTurnCooldown() {
+    if (this.cooldownTimer) clearTimeout(this.cooldownTimer);
+    this.cooldownUntil = Date.now() + TURN_COOLDOWN_MS;
+    this.cooldownTimer = setTimeout(() => {
+      this.cooldownTimer = null;
+      this.cooldownUntil = null;
+      this.advanceToNextConnectedPlayer();
+      this.emit('beep');
+      this.emit('update');
+    }, TURN_COOLDOWN_MS);
   }
 
   advanceToNextConnectedPlayer() {
@@ -375,6 +426,7 @@ class Room {
 
   callChallenge(playerId) {
     if (this.phase !== 'playing') throw new Error('Not currently playing');
+    if (this.cooldownUntil) throw new Error('Waiting for the next turn to begin');
     if (this.currentPlayer().id !== playerId) throw new Error('Not your turn');
     if (this.pendingDraw) throw new Error('Resolve your draw first');
     if (this.currentRound() < MIN_ROUND_TO_CHALLENGE) {
@@ -394,10 +446,13 @@ class Room {
       this.endGame();
       return;
     }
-    this.advanceToNextConnectedPlayer();
+    this.beginTurnCooldown();
   }
 
   endGame() {
+    if (this.cooldownTimer) clearTimeout(this.cooldownTimer);
+    this.cooldownTimer = null;
+    this.cooldownUntil = null;
     this.phase = 'ended';
     const results = this.players.map(p => ({
       id: p.id,
@@ -422,6 +477,7 @@ class Room {
       phase: this.phase,
       hostId: this.hostId,
       turnPlayerId: this.players[this.turnIndex]?.id || null,
+      turnCooldownUntil: this.cooldownUntil,
       round: this.currentRound(),
       minRoundToChallenge: MIN_ROUND_TO_CHALLENGE,
       deckCount: this.deck.length,
@@ -432,21 +488,32 @@ class Room {
       challenge: this.challenge,
       log: this.log.slice(-30),
       finalResults: this.phase === 'ended' ? this.finalResults : null,
-      players: this.players.map(p => ({
-        id: p.id,
-        name: p.name,
-        connected: p.connected,
-        cardCount: p.hand.length,
-        foulCount: p.foulCount,
-        isMe: p.id === viewerId,
-        hand: p.hand.map(slot => ({
-          uid: slot.uid,
-          known: slot.knownBy.includes(viewerId),
-          rank: slot.knownBy.includes(viewerId) ? slot.card.rank : null,
-          suit: slot.knownBy.includes(viewerId) ? slot.card.suit : null,
-          value: slot.knownBy.includes(viewerId) ? slot.card.value : null,
-        })),
-      })),
+      players: this.players.map(p => {
+        const isMe = p.id === viewerId;
+        const revealActive = isMe && p.peekReveal && p.peekReveal.until > Date.now();
+        return {
+          id: p.id,
+          name: p.name,
+          connected: p.connected,
+          cardCount: p.hand.length,
+          foulCount: p.foulCount,
+          isMe,
+          peeked: !!p.peeked,
+          peekRevealUntil: revealActive ? p.peekReveal.until : null,
+          hand: p.hand.map((slot, idx) => {
+            const permanentlyKnown = slot.knownBy.includes(viewerId);
+            const temporarilyRevealed = revealActive && p.peekReveal.slotIndices.includes(idx);
+            const known = permanentlyKnown || temporarilyRevealed;
+            return {
+              uid: slot.uid,
+              known,
+              rank: known ? slot.card.rank : null,
+              suit: known ? slot.card.suit : null,
+              value: known ? slot.card.value : null,
+            };
+          }),
+        };
+      }),
     };
   }
 }
